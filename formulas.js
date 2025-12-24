@@ -1,75 +1,36 @@
 // formulas.js
-export function clamp01(x) {
-  if (Number.isNaN(x)) return 0;
-  return Math.max(0, Math.min(1, x));
-}
+export const CONST = { DEF_CONST: 467 };
 
-export function toNum(x, d = 0) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : d;
-}
+const n = (x,d=0)=> (Number.isFinite(Number(x))? Number(x): d);
+const clamp01 = (x)=> Math.max(0, Math.min(1, n(x,0)));
 
-// (1) 공격력 유효값
-export function calcAtkEff(v) {
-  // v: normalized input
-  // 예시: 엑셀 구조 기반
-  const base = v.atk_base + v.atk_add + v.atk_pet
-    + (v.atk_base * v.atk_form_bonus / (1 + v.atk_transcend_bonus));
+export function calcAll(state){
+  // ✅ 임시 계산(UI용)
+  // 다음 단계에서 엑셀 수식(수식_공격력/수식_방어력/피증/피감/받피증/받피감/치명/약점/막기)을 그대로 이 함수로 옮기면 됨.
+  const atk = n(state.atk_base)+n(state.atk_add)+n(state.atk_pet);
+  const def = n(state.def_base)+n(state.def_add)+n(state.def_pet);
 
-  const mul = 1
-    + v.atk_buff_pet + v.atk_buff_always + v.atk_buff_turn
-    - v.atk_debuff_always - v.atk_debuff_turn;
+  const skill = n(state.skill_coef, 1);
+  const armorIgnore = clamp01(state.armor_ignore);
 
-  return base * mul;
-}
+  const giveInc = 1 + n(state.dmg_inc_revenge) + n(state.dmg_inc_always) + n(state.dmg_inc_turn);
+  const giveDec = 1 - n(state.dmg_dec_always) - n(state.dmg_dec_turn);
 
-// (2) 방어력 유효값
-export function calcDefEff(v) {
-  const base = v.def_base + v.def_add + v.def_pet
-    + (v.def_base * v.def_form_bonus / (1 + v.def_transcend_bonus));
+  const takeInc = 1 + n(state.taken_inc_always) + n(state.taken_inc_turn);
+  const takeDec = (1 - n(state.taken_dec_stat)) * (1 - n(state.taken_dec_always) - n(state.taken_dec_turn));
 
-  const mul = 1
-    + v.def_buff_pet + v.def_buff_always + v.def_buff_turn
-    - v.def_debuff_always - v.def_debuff_turn;
+  const critMul = state.crit_on ? (n(state.crit_dmg_stat,1) + n(state.crit_dmg_always) + n(state.crit_dmg_turn)) : 1;
+  const weakMul = state.weak_on ? (n(state.weak_dmg_stat,1) + n(state.weak_dmg_always) + n(state.weak_dmg_turn)) : 1;
+  const blockMul = state.block_on ? (1 - n(state.block_dec_stat)) : 1;
 
-  const after = base * mul * (1 - clamp01(v.armor_ignore));
+  const defEff = Math.max(0, def * (1 - armorIgnore));
+  const defFactor = CONST.DEF_CONST / (defEff + CONST.DEF_CONST);
 
-  // 제이브 예외 같은 건 여기서 분기
-  const javeBonus = v.is_jave ? Math.min(Math.floor(v.atk_eff / 300) * 125, 1125) : 0;
-  return after + javeBonus;
-}
+  const atkEff = atk; // 임시
+  const dmg = atkEff * skill * giveInc * giveDec * takeInc * takeDec * critMul * weakMul * blockMul * defFactor;
 
-// (3) 배율들
-export function calcMultipliers(v) {
-  const giveInc = 1 + v.dmg_inc_revenge + v.dmg_inc_always + v.dmg_inc_turn;
-  const giveDec = 1 - v.dmg_dec_always - v.dmg_dec_turn;
-
-  const takeInc = 1 + v.taken_inc_always + v.taken_inc_turn;
-
-  // "스탯 받피감"은 곱으로 분리(엑셀 반영)
-  const takeDec = (1 - v.taken_dec_stat) * (1 - v.taken_dec_always - v.taken_dec_turn);
-
-  const critMul = v.crit_on ? (v.crit_dmg_stat + v.crit_dmg_always + v.crit_dmg_turn) : 1;
-  const weakMul = v.weak_on ? (v.weak_dmg_stat + v.weak_dmg_always + v.weak_dmg_turn) : 1;
-  const blockMul = v.block_on ? (1 - v.block_dec_stat) : 1;
-
-  return { giveInc, giveDec, takeInc, takeDec, critMul, weakMul, blockMul };
-}
-
-export function calcDamage(v, DEF_CONST) {
-  // v.skill_coef: 스킬 계수(배율)
-  const atkEff = calcAtkEff(v);
-  v.atk_eff = atkEff; // 제이브 보너스에서 쓰려고 저장(원하면 리턴 구조로 분리해도 됨)
-
-  const defEff = calcDefEff(v);
-  const defFactor = DEF_CONST / (defEff + DEF_CONST);
-
-  const m = calcMultipliers(v);
-
-  const dmg = atkEff * v.skill_coef
-    * m.giveInc * m.giveDec * m.takeInc * m.takeDec
-    * m.critMul * m.weakMul * m.blockMul
-    * defFactor;
-
-  return { dmg, atkEff, defEff, defFactor, m };
+  return {
+    dmg,
+    debug: { atkEff, defEff, defFactor, giveInc, giveDec, takeInc, takeDec, critMul, weakMul, blockMul }
+  };
 }
