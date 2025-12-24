@@ -1,0 +1,22 @@
+{
+  "constants": {
+    "DEF_CONST": 467
+  },
+  "defaults": {
+    "crit_on": false,
+    "weak_on": false,
+    "block_on": false,
+    "armor_ignore": 0
+  },
+  "stack_rules": {
+    "buff_mode": "sum",
+    "debuff_mode": "sum"
+  },
+  "labels": {
+    "atk_base": "기본 공격력",
+    "atk_add": "추가 공격력",
+    "atk_pet": "펫 공격력",
+    "atk_buff_always": "공증(상시)",
+    "atk_buff_turn": "공증(턴제)"
+  }
+}
